@@ -4,7 +4,7 @@ import { Widget } from '@phosphor/widgets';
 
 import { IJupyterWidgetRegistry } from '@jupyter-widgets/base';
 
-import { MODULE_NAME, MODULE_VERSION } from './version';
+import { MODULE_VERSION, MODULE_NAME } from './version';
 
 const EXTENSION_ID = 'matplotlib-jupyter:main';
 
@@ -32,6 +32,6 @@ function activateWidgetExtension(
     registry.registerWidget({
         name: MODULE_NAME,
         version: MODULE_VERSION,
-        exports: () => import('./index'),
+        exports: (): any => import('./index'),
     });
 }

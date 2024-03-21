@@ -2,6 +2,7 @@
 
 import sys
 import types
+from warnings import warn
 
 # In the case of a pyodide context (JupyterLite)
 # we mock Tornado, as it cannot be imported and would
@@ -54,6 +55,7 @@ from traitlets import (
     Tuple,
     Unicode,
     default,
+    observe,
 )
 
 from ._version import js_semver
@@ -99,15 +101,19 @@ class Toolbar(DOMWidget, NavigationToolbar2WebAgg):
     _view_name = Unicode('ToolbarView').tag(sync=True)
 
     toolitems = List().tag(sync=True)
-    orientation = Enum(['horizontal', 'vertical'], default_value='vertical').tag(
-        sync=True
-    )
     button_style = CaselessStrEnum(
         values=['primary', 'success', 'info', 'warning', 'danger', ''],
         default_value='',
         help="""Use a predefined styling for the button.""",
     ).tag(sync=True)
+
+    #######
+    # Those traits are deprecated
+    orientation = Enum(['horizontal', 'vertical'], default_value='vertical').tag(
+        sync=True
+    )
     collapsed = Bool(True).tag(sync=True)
+    #######
 
     _current_action = Enum(values=['pan', 'zoom', ''], default_value='').tag(sync=True)
 
@@ -153,6 +159,23 @@ class Toolbar(DOMWidget, NavigationToolbar2WebAgg):
             if icon_name in icons
         ]
 
+    def __getattr__(self, name):
+        if name in ['orientation', 'collapsed']:
+            warn(
+                "The Toolbar properties 'orientation' and 'collapsed' are deprecated."
+                "Accessing them will raise an error in a coming ipympl release",
+                DeprecationWarning,
+            )
+
+        return super().__getattr__(name)
+
+    @observe('orientation', 'collapsed')
+    def _on_orientation_collapsed_changed(self, change):
+        warn(
+            "The Toolbar properties 'orientation' and 'collapsed' are deprecated.",
+            DeprecationWarning,
+        )
+
 
 class Canvas(DOMWidget, FigureCanvasWebAggCore):
 
@@ -165,7 +188,10 @@ class Canvas(DOMWidget, FigureCanvasWebAggCore):
     _view_name = Unicode('MPLCanvasView').tag(sync=True)
 
     toolbar = Instance(Toolbar, allow_none=True).tag(sync=True, **widget_serialization)
-    toolbar_visible = Bool(True).tag(sync=True)
+    toolbar_visible = Enum(
+        ['visible', 'hidden', 'fade-in-fade-out', True, False],
+        default_value='fade-in-fade-out',
+    ).tag(sync=True)
     toolbar_position = Enum(
         ['top', 'bottom', 'left', 'right'], default_value='left'
     ).tag(sync=True)
@@ -426,11 +452,13 @@ class Canvas(DOMWidget, FigureCanvasWebAggCore):
 
 
 class FigureManager(FigureManagerWebAgg):
-    ToolbarCls = Toolbar
+    if matplotlib.__version__ < "3.6":
+        ToolbarCls = Toolbar
 
     def __init__(self, canvas, num):
         FigureManagerWebAgg.__init__(self, canvas, num)
         self.web_sockets = [self.canvas]
+        self.toolbar = Toolbar(self.canvas)
 
     def show(self):
         if self.canvas._closed:
@@ -467,10 +495,25 @@ class _Backend_ipympl(_Backend):
             Gcf.destroy(manager)
 
         cid = canvas.mpl_connect('close_event', destroy)
+
+        # Only register figure for showing when in interactive mode (otherwise
+        # we'll generate duplicate plots, since a user who set ioff() manually
+        # expects to make separate draw/show calls).
+        if is_interactive():
+            # ensure current figure will be drawn.
+            try:
+                _Backend_ipympl._to_show.remove(figure)
+            except ValueError:
+                # ensure it only appears in the draw list once
+                pass
+            # Queue up the figure for drawing in next show() call
+            _Backend_ipympl._to_show.append(figure)
+            _Backend_ipympl._draw_called = True
+
         return manager
 
     @staticmethod
-    def show(close=None, block=None):
+    def show(block=None):
         # # TODO: something to do when keyword block==False ?
         interactive = is_interactive()
 
@@ -495,35 +538,10 @@ class _Backend_ipympl(_Backend):
             if manager.canvas.figure in _Backend_ipympl._to_show:
                 _Backend_ipympl._to_show.remove(manager.canvas.figure)
 
-    @staticmethod
-    def draw_if_interactive():
-        # If matplotlib was manually set to non-interactive mode, this function
-        # should be a no-op (otherwise we'll generate duplicate plots, since a
-        # user who set ioff() manually expects to make separate draw/show
-        # calls).
-        if not is_interactive():
-            return
-
-        manager = Gcf.get_active()
-        if manager is None:
-            return
-        fig = manager.canvas.figure
-
-        # ensure current figure will be drawn, and each subsequent call
-        # of draw_if_interactive() moves the active figure to ensure it is
-        # drawn last
-        try:
-            _Backend_ipympl._to_show.remove(fig)
-        except ValueError:
-            # ensure it only appears in the draw list once
-            pass
-        # Queue up the figure for drawing in next show() call
-        _Backend_ipympl._to_show.append(fig)
-        _Backend_ipympl._draw_called = True
-
 
 def flush_figures():
-    if rcParams['backend'] == 'module://ipympl.backend_nbagg':
+    backend = matplotlib.get_backend()
+    if backend in ('widget', 'ipympl', 'module://ipympl.backend_nbagg'):
         if not _Backend_ipympl._draw_called:
             return
 

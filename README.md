@@ -1,15 +1,16 @@
 # ipympl
 
-[![Test Status](https://github.com/matplotlib/ipympl/actions/workflows/mpl-latest.yml/badge.svg)](https://github.com/matplotlib/ipympl/actions/workflows/mpl-latest.yml?query=branch%3Amaster)
+[![Test Status](https://github.com/matplotlib/ipympl/actions/workflows/main.yml/badge.svg)](https://github.com/matplotlib/ipympl/actions/workflows/main.yml?query=branch%3Amain)
 [![Latest PyPI version](https://img.shields.io/pypi/v/ipympl?logo=pypi)](https://pypi.python.org/pypi/ipympl)
 [![Latest conda-forge version](https://img.shields.io/conda/vn/conda-forge/ipympl?logo=conda-forge)](https://anaconda.org/conda-forge/ipympl)
 [![Latest npm version](https://img.shields.io/npm/v/jupyter-matplotlib?logo=npm)](https://www.npmjs.com/package/jupyter-matplotlib)
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/matplotlib/ipympl/stable?urlpath=%2Flab%2Ftree%2Fexamples%2Fipympl.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/matplotlib/ipympl/stable?urlpath=retro/notebooks/docs/examples/full-example.ipynb)
 [![Gitter](https://img.shields.io/badge/gitter-Join_chat-blue?logo=gitter)](https://gitter.im/jupyter-widgets/Lobby)
 
 Leveraging the Jupyter interactive widgets framework, `ipympl` enables the interactive features of matplotlib in the Jupyter notebook and in JupyterLab.
 
 Besides, the figure `canvas` element is a proper Jupyter interactive widget which can be positioned in interactive widget layouts.
+
 
 ## Usage
 
@@ -19,9 +20,10 @@ magic:
 ```
 %matplotlib widget
 ```
-
+## Documentation
+See the documentation at: https://matplotlib.org/ipympl/
 ## Example
-See the [example notebook](https://github.com/matplotlib/ipympl/blob/master/examples/ipympl.ipynb) for more!
+See the [example notebook](https://github.com/matplotlib/ipympl/blob/main/docs/examples/full-example.ipynb) for more!
 
 ![matplotlib screencast](matplotlib.gif)
 
@@ -64,7 +66,10 @@ Versions lookup table:
 
 | `ipympl` | `jupyter-matplotlib` | `JupyterLab` | `Matplotlib` |
 |----------|----------------------|--------------|--------------|
-| 0.8.x    | 0.10.x               | 3 or 2       | 3.3.1>=      |
+| 0.9.3    | 0.11.3+              | 3 or 2       | 3.4.0>=      |
+| 0.9.0-2  | 0.11.0-2             | 3 or 2       | 3.4.0>=  <3.7|
+| 0.8.8    | 0.10.x               | 3 or 2       | 3.3.1>=  <3.7|
+| 0.8.0-7  | 0.10.x               | 3 or 2       | 3.3.1>=, <3.6|
 | 0.7.0    | 0.9.0                | 3 or 2       | 3.3.1>=      |
 | 0.6.x    | 0.8.x                | 3 or 2       | 3.3.1>=, <3.4|
 | 0.5.8    | 0.7.4                | 1 or 2       | 3.3.1>=, <3.4|
@@ -100,7 +105,7 @@ notebook / lab frontend. For lab, this is done by the command:
 
 ```bash
 jupyter labextension develop --overwrite .
-yarn run build
+jlpm build
 ```
 
 For classic notebook, you need to run:
@@ -117,7 +122,7 @@ If you use JupyterLab to develop then you can watch the source directory and run
 
 ```bash
 # Watch the source directory in one terminal, automatically rebuilding when needed
-yarn run watch
+jlpm watch
 # Run JupyterLab in another terminal
 jupyter lab
 ```

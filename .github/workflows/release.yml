@@ -7,20 +7,27 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Install node
-      uses: actions/setup-node@v1
+
+    - uses: actions/checkout@v4
+
+    - name: Install Conda environment with Micromamba
+      uses: mamba-org/provision-with-micromamba@main
       with:
-        node-version: '14.x'
-        registry-url: 'https://registry.npmjs.org'
-    - name: Install Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
+        channels: conda-forge
+        environment-file: false
+        environment-name: ipympl-release
+        extra-specs: |
+          python=3.9
+          jupyterlab
+          yarn
+          matplotlib
+          ipywidgets
+          jupyter-packaging=0.7
+
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install twine wheel build
+        python -m pip install twine wheel build
+
     - name: Publish the Python package
       env:
         TWINE_USERNAME: __token__
@@ -28,12 +35,11 @@ jobs:
       run: |
         python -m build
         twine upload dist/ipympl-*
+
     - name: Publish the NPM package
       run: |
-        cd js
-        echo $PRE_RELEASE
-        if [[ $PRE_RELEASE == "true" ]]; then export TAG="next"; else export TAG="latest"; fi
-        npm publish --tag ${TAG} --access public
+        jlpm install && jlpm build
+        npm publish
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         PRE_RELEASE: ${{ github.event.release.prerelease }}

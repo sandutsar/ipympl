@@ -3,98 +3,42 @@ name: Tests
 on:
   push:
     branches:
-    - master
+    - main
   pull_request:
     branches:
-    - master
+    - main
+  schedule:
+    - cron: "0 12 * * 1" # monday at noon UTC
 
 defaults:
   run:
     shell: bash -l {0}
 
 jobs:
-  run:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: [3.8]
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-
-    - name: Setup conda
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        activate-environment: ipympl-dev
-        environment-file: dev-environment.yml
-        python-version: ${{ matrix.python-version }}
-        mamba-version: "*"
-        auto-activate-base: false
-        channels: conda-forge
-
-    - name: Install ipympl
-      run: |
-        python -m build
-        pip install dist/*.whl
-
-    - name: Check installation files
-      run: |
-        test -d $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib
-        test -f $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib/extension.js
-        test -f $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib/index.js
-        test -d $CONDA_PREFIX/share/jupyter/labextensions/jupyter-matplotlib
-        test -f $CONDA_PREFIX/share/jupyter/labextensions/jupyter-matplotlib/package.json
-
-    - name: Check nbextension and labextension
-      run: |
-        jupyter nbextension list 2>&1 | grep -ie "jupyter-matplotlib/extension.*enabled" -
-        jupyter labextension list 2>&1 | grep -ie "jupyter-matplotlib.*enabled.*ok" -
-
-    - name: Run tests
-      run: pytest .
-
-    - name: Test flake8
-      run: flake8 ipympl --ignore=E501,W504,W503
-
-    - name: Test TS linters
-      run: |
-        npm run eslint:check
-        npm run prettier:check
-
   build:
     runs-on: ubuntu-latest
     steps:
-
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
-    - name: Setup conda
-      uses: conda-incubator/setup-miniconda@v2
+    - name: Install Conda environment with Micromamba
+      uses: mamba-org/setup-micromamba@v1
       with:
-        activate-environment: ipympl-dev
-        environment-file: dev-environment.yml
-        python-version: ${{ matrix.python-version }}
-        mamba-version: "*"
-        auto-activate-base: false
-        channels: conda-forge
+          environment-file: dev-environment.yml
 
     - name: Build packages
       run: |
-        python setup.py sdist bdist_wheel
+        python -m build
         cd dist
         sha256sum * | tee SHA256SUMS
 
     - name: Upload builds
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: dist ${{ github.run_number }}
         path: ./dist
 
-  install:
+  Test:
     runs-on: ${{ matrix.os }}-latest
     needs: [build]
 
@@ -102,32 +46,41 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu, macos]
-        python: ['3.6', '3.9']
+        python: ['3.9', '3.12']
+        mpl-version: ['latest']
+        dist: ['ipympl*.whl']
         include:
-          - python: '3.6'
-            dist: 'ipympl*.tar.gz'
-            jlab_version: 3
-          - python: '3.9'
+          # Earliest supported Matplotlib, needs python <= 3.10
+          - os: ubuntu
+            python: '3.9'
+            mpl-version: '3.5'
             dist: 'ipympl*.whl'
-            jlab_version: 2.3.2
+          # Install from sdist not wheel
+          - os: ubuntu
+            python: '3.11'
+            mpl-version: 'latest'
+            dist: 'ipympl*.tar.gz'
 
     steps:
-
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Setup conda
-        uses: conda-incubator/setup-miniconda@v2
+      - name: Install Conda environment with Micromamba
+        uses: mamba-org/setup-micromamba@v1
         with:
-          python-version: ${{ matrix.python-version }}
-          mamba-version: "*"
-          auto-activate-base: false
-          channels: conda-forge
+          environment-file: dev-environment.yml
+          create-args: >-
+            python=${{ matrix.python }}
 
-      - name: Install dependencies
-        run: mamba install python=${{ matrix.python-version }} pip yarn jupyterlab=${{ matrix.jlab_version }} ipywidgets jupyter-packaging
+      - if: matrix.mpl-version == 'latest'
+        name: Install latest Matplotlib
+        run: pip install --upgrade --pre --index-url https://pypi.anaconda.org/scipy-wheels-nightly/simple --extra-index-url https://pypi.org/simple matplotlib
 
-      - uses: actions/download-artifact@v2
+      - if: matrix.mpl-version != 'latest'
+        name: Install matplotlib pinned
+        run: micromamba install matplotlib=${{ matrix.mpl-version}}.*
+
+      - uses: actions/download-artifact@v3
         with:
           name: dist ${{ github.run_number }}
           path: ./dist
@@ -137,79 +90,58 @@ jobs:
           cd dist
           pip install -vv ${{ matrix.dist }}
 
-      - name: Manually install labextension for lab2
-        if: ${{ matrix.jlab_version }} == 2.3.2
-        run: jupyter labextension install --debug .
-
       - name: Test installation files
         run: |
+          ls -l $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib
           test -d $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib
           test -f $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib/extension.js
           test -f $CONDA_PREFIX/share/jupyter/nbextensions/jupyter-matplotlib/index.js
+          ls -l $CONDA_PREFIX/share/jupyter/labextensions/jupyter-matplotlib
           test -d $CONDA_PREFIX/share/jupyter/labextensions/jupyter-matplotlib
           test -f $CONDA_PREFIX/share/jupyter/labextensions/jupyter-matplotlib/package.json
           test -d $CONDA_PREFIX/share/jupyter/labextensions/jupyter-matplotlib/static
 
-      - name: Validate the nbextension
-        run: jupyter nbextension list 2>&1 | grep "jupyter-matplotlib/extension"
-
       - name: Validate the labextension
         run: jupyter labextension list 2>&1 | grep jupyter-matplotlib
 
+      - name: Run pytest
+        run: pytest -v .
 
-  visual-regression-tests:
-    runs-on: ubuntu-latest
-    needs: [build]
-
-    strategy:
-      fail-fast: false
-
-    steps:
-
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup conda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          python-version: 3.9
-          mamba-version: "*"
-          auto-activate-base: false
-          channels: conda-forge
-
-      - name: Install dependencies
-        run: mamba install pip yarn jupyterlab=3.0.11 ipywidgets jupyter-packaging
-
-      - uses: actions/download-artifact@v2
-        with:
-          name: dist ${{ github.run_number }}
-          path: ./dist
-
-      - name: Install the package
-        run: pip install -vv ipympl*.whl
-        working-directory: dist
-
-      - name: Install test dependencies
-        run: yarn install
+      - name: Install Galata test dependencies
+        if: matrix.os == 'ubuntu'
+        run: |
+          jlpm install
+          jlpm playwright install chromium
         working-directory: ui-tests
-
-      - name: Launch JupyterLab
-        run: yarn run start-jlab:detached
-        working-directory: ui-tests
-
-      - name: Wait for JupyterLab
-        uses: ifaxity/wait-on-action@v1
-        with:
-          resource: http-get://localhost:8888/api
-          timeout: 20000
 
       - name: Run UI Tests
-        run: yarn run test
+        if: matrix.os == 'ubuntu'
+        run: jlpm playwright test
         working-directory: ui-tests
 
       - name: Upload UI Test artifacts
-        if: always()
-        uses: actions/upload-artifact@v2
+        if: always() && matrix.os == 'ubuntu'
+        uses: actions/upload-artifact@v3
         with:
           name: ui-test-output
-          path: ui-tests/test-output
+          path: |
+            ui-tests/playwright-report
+            ui-tests/test-results
+
+      # If something goes wrong for the latests test cron job
+      # then open an issue in the repo
+      # This setup based on:
+      # https://github.com/pymmcore-plus/pymmcore-widgets/blob/5e233384e223ca00101ef4b741d3c525a5cff9c9/.github/workflows/cron.yml#L49
+      - name: Report Failures
+        if: failure() && github.event_name == 'schedule'
+        uses: JasonEtco/create-an-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OS: ${{ matrix.os }}
+          PYTHON: ${{ matrix.python }}
+          MATPLOTLIB: ${{ matrix.mpl-version }}
+          RUN_ID: ${{ github.run_id }}
+          TITLE: '[test-bot] Scheduled Tests are failing'
+        with:
+          filename: .github/TEST_FAIL_TEMPLATE.md
+          update_existing: true
